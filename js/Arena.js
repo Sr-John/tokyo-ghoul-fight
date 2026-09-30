@@ -7,6 +7,9 @@
  *
  * O `groundY` é a linha onde os lutadores assentam os pés — não o fundo do
  * canvas. É o que permite ter chão desenhado por baixo deles.
+ *
+ * Com uma fotografia em `backdrop`, ela toma o lugar do céu e dos prédios:
+ * o chão continua a ser o desenhado.
  */
 
 const PALETTE = {
@@ -41,6 +44,9 @@ export class Arena {
     this.width = width;
     this.height = height;
     this.groundY = groundY;
+
+    /** Imagem de fundo, ou null para o cenário desenhado a código. */
+    this.backdrop = null;
 
     const random = createRandom(seed);
 
@@ -98,11 +104,42 @@ export class Arena {
   }
 
   draw(ctx) {
-    this.drawSky(ctx);
-    this.drawMoon(ctx);
-    this.drawBuildings(ctx, this.farBuildings, PALETTE.buildingsFar);
-    this.drawBuildings(ctx, this.nearBuildings, PALETTE.buildingsNear);
+    if (this.backdrop) {
+      this.drawBackdrop(ctx);
+    } else {
+      this.drawSky(ctx);
+      this.drawMoon(ctx);
+      this.drawBuildings(ctx, this.farBuildings, PALETTE.buildingsFar);
+      this.drawBuildings(ctx, this.nearBuildings, PALETTE.buildingsNear);
+    }
     this.drawGround(ctx);
+  }
+
+  /**
+   * A fotografia enche tudo o que fica acima do chão, sem deformar: o que
+   * sobrar corta-se em cima, para a base dela assentar na linha do chão.
+   */
+  drawBackdrop(ctx) {
+    const { naturalWidth, naturalHeight } = this.backdrop;
+    const scale = Math.max(this.width / naturalWidth, this.groundY / naturalHeight);
+    const cropWidth = this.width / scale;
+    const cropHeight = this.groundY / scale;
+
+    ctx.save();
+    // Ao contrário da pixel art, uma fotografia quer-se suavizada.
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(
+      this.backdrop,
+      (naturalWidth - cropWidth) / 2,
+      naturalHeight - cropHeight,
+      cropWidth,
+      cropHeight,
+      0,
+      0,
+      this.width,
+      this.groundY,
+    );
+    ctx.restore();
   }
 
   drawSky(ctx) {

@@ -1,9 +1,9 @@
 /**
  * Converte um GIF animado numa spritesheet PNG com os frames lado a lado.
- * Sem dependencias: descodifica o LZW do GIF e escreve o PNG com o zlib do Node.
+ * Sem dependencias: descodifica o LZW do GIF e escreve o PNG com o png.mjs aqui ao lado.
  */
 import fs from 'node:fs';
-import zlib from 'node:zlib';
+import { encodePng } from './png.mjs';
 
 // ---------------------------------------------------------------- GIF
 
@@ -189,59 +189,6 @@ function deinterlaceRows(height) {
   for (let y = 2; y < height; y += 4) rows.push(y);
   for (let y = 1; y < height; y += 2) rows.push(y);
   return rows;
-}
-
-// ---------------------------------------------------------------- PNG
-
-const CRC_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
-    table[n] = c >>> 0;
-  }
-  return table;
-})();
-
-function crc32(buf) {
-  let c = 0xffffffff;
-  for (const byte of buf) c = CRC_TABLE[(c ^ byte) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
-
-function pngChunk(type, data) {
-  const len = Buffer.alloc(4);
-  len.writeUInt32BE(data.length);
-  const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(body));
-  return Buffer.concat([len, body, crc]);
-}
-
-function encodePng(width, height, rgba) {
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(width, 0);
-  ihdr.writeUInt32BE(height, 4);
-  ihdr[8] = 8;   // bits por canal
-  ihdr[9] = 6;   // RGBA
-  ihdr[10] = 0;  // compressao
-  ihdr[11] = 0;  // filtro
-  ihdr[12] = 0;  // sem entrelacamento
-
-  // Cada linha leva um byte de filtro a zero (sem filtro).
-  const raw = Buffer.alloc(height * (width * 4 + 1));
-  for (let y = 0; y < height; y++) {
-    raw[y * (width * 4 + 1)] = 0;
-    Buffer.from(rgba.buffer, rgba.byteOffset + y * width * 4, width * 4)
-      .copy(raw, y * (width * 4 + 1) + 1);
-  }
-
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    pngChunk('IHDR', ihdr),
-    pngChunk('IDAT', zlib.deflateSync(raw, { level: 9 })),
-    pngChunk('IEND', Buffer.alloc(0)),
-  ]);
 }
 
 // ---------------------------------------------------------------- main

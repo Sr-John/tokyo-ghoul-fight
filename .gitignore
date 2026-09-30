@@ -41,3 +41,7 @@ $RECYCLE.BIN/
 coverage/
 .nyc_output/
 .eslintcache
+
+# Pacotes de MUGEN originais: são a fonte de assets/, e pesam 200 MB
+ChaosTanjiro/
+Lifebar/
