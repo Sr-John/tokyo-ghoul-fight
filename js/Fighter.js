@@ -14,6 +14,8 @@ export class Fighter {
     width = 50,
     height = 150,
     color = '#ffffff',
+    maxHealth = 100,
+    facing = 1,
     bounds,
   }) {
     this.position = { x, y };
@@ -22,6 +24,16 @@ export class Fighter {
     this.height = height;
     this.color = color;
 
+    // Lado para onde o lutador olha: 1 = direita, -1 = esquerda. O desenho
+    // dos bonecos espelha-se com este valor.
+    this.facing = facing;
+
+    // Contador de frames, base das animações (ciclo de passada, etc.).
+    this.animationTime = 0;
+
+    this.maxHealth = maxHealth;
+    this.health = maxHealth;
+
     // Limites do ringue: o lutador precisa de saber onde está o chão e as
     // paredes para a colisão, em vez de ir buscar o canvas por fora.
     this.bounds = bounds;
@@ -29,11 +41,26 @@ export class Fighter {
 
   /** O chão, em coordenadas de canvas (topo do lutador quando assentado). */
   get groundY() {
-    return this.bounds.height - this.height;
+    // A linha do chão vem da arena. Sem arena, o fundo do canvas serve.
+    return (this.bounds.groundY ?? this.bounds.height) - this.height;
   }
 
   get isOnGround() {
     return this.position.y >= this.groundY;
+  }
+
+  /** Vida entre 0 e 1 — é nesta forma que a barra de vida a consome. */
+  get healthRatio() {
+    return this.health / this.maxHealth;
+  }
+
+  get isDefeated() {
+    return this.health <= 0;
+  }
+
+  /** Retira vida, sem nunca descer abaixo de zero. */
+  takeDamage(amount) {
+    this.health = Math.max(0, this.health - amount);
   }
 
   jump(force) {
@@ -50,6 +77,8 @@ export class Fighter {
   }
 
   update(ctx) {
+    this.animationTime += 1;
+
     this.position.x += this.velocity.x;
     this.position.y += this.velocity.y;
 
