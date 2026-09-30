@@ -37,6 +37,8 @@
  *              acertado); o primeiro que servir ganha
  *   projectiles  partes do golpe que vivem fora do corpo e acertam sozinhas
  *              (ver spawnProjectile, no MoveFighter)
+ *   effects    o que o golpe larga só para se ver: [{ time | elem, action,
+ *              atlas, at, scale, ... }] (ver spawnEffect, no MoveFighter)
  *   tick       o que não cabe nos campos acima
  */
 
@@ -63,8 +65,8 @@ const FROM_AIR_DASH = [
  * Os especiais param o tempo ao adversário enquanto o Kaneki se prepara
  * (a "superpause" do MUGEN).
  */
-function freezeOpponent(fighter) {
-  if (fighter.moveTime === 1 && fighter.opponent) fighter.opponent.hitPause = 30;
+export function freezeOpponent(fighter) {
+  if (fighter.moveTime === 1) fighter.superPause(30);
 }
 
 const SLASH_HIT_SOUNDS = [
@@ -1031,7 +1033,7 @@ function canUseUltimate(fighter) {
 }
 
 /** Os especiais gastam um nível da barra de energia. */
-const SPECIAL_POWER = 1000;
+export const SPECIAL_POWER = 1000;
 
 /**
  * O que cada tecla faz quando o Kaneki está livre. A ordem conta: ganha a

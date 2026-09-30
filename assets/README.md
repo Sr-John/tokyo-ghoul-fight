@@ -8,7 +8,7 @@
 | `kaneki/fx-common/` | poeira, faíscas, vento e o chão a rachar, no mesmo formato |
 | `kaneki/fx-ultimate/` | os efeitos da cena do ultimate, no mesmo formato (atlas + `character.json`) |
 | `tanjiro/` | o adversário: as animações que o jogo usa do Tanjiro, os retratos e os sons dos golpes normais |
-| `hud/` | a arte das barras de vida e de energia |
+| `hud/` | a arte das barras de vida e de energia; em `hud/announcer/`, os anúncios ("Round 1", "Fight", "K.O.") e as vozes deles |
 | `music.mp3` | a música de fundo |
 | `arena-bg.jpg` | a fotografia de fundo da arena (por cima do chão, que continua desenhado) |
 | `ultimate-bg.jpg` | a fotografia de fundo da transformação do ultimate |
@@ -72,11 +72,24 @@ ficheiro explica os campos. Quem executa a tabela é o `js/MoveFighter.js`.
 | I | especial 1, Binge Strike (gasta um nível de energia) |
 | W + I, ou I no ar | especial 2, Rinkaku Assault (um nível) |
 | S + I | ultimate (barra de energia cheia) |
+| S, D + J | Binge Strike (como o I) · S, A + J: Quarter Kill, a postura que responde a um golpe com cortes invisíveis (um nível) |
+| S, D + O | Eater Hunt, investida de muitos toques · S, A + O: Rising Pierce, a kagune que rebenta do chão (um nível) |
+| S, D + U | Rinkaku Assault (como o W + I) · S, A + U: Rinkaku Crawling, a kagune que avança pelo chão (um nível) |
+| S, D, S, D + J | super Half Kill: agarra e tira quase metade da vida (1,5 níveis) |
+| S, D, S, D + O | super Devouring Hunt (1,5 níveis) |
+| S, D, S, D + U | super Rinkaku Overkill (2 níveis) |
 | Q (segurar) | carregar a energia; ao encher com a tecla em baixo, descarga |
-| Esc | pausar e retomar |
-| Enter | saltar a apresentação do início; recomeçar, quando aparece "Tentar novamente?" |
+| Esc | pausar e retomar (a pausa mostra a lista de comandos dos dois) |
+| Enter | saltar a apresentação do início; revanche, quando aparece "Tentar novamente?" |
+| Backspace | voltar ao menu, no fim da partida |
 
-W e S não fazem nada sozinhas (S agacha): escolhem a variante do golpe. No
+W e S não fazem nada sozinhas (S agacha): escolhem a variante do golpe. Os
+comandos com vírgula são sequências, como no MUGEN: S, depois D (ou A), e o
+botão; os supers repetem a sequência duas vezes. A e D contam para a frente
+e para trás do Kaneki, e o golpe sai para onde ele olhava quando começou.
+Os especiais estão em `js/kanekiSpecials.js` e os supers em
+`js/kanekiSupers.js`, com os mesmos campos da tabela principal; os efeitos
+grandes deles, em `kaneki/fx-specials/` e `kaneki/fx-supers/`. No
 ar, J, O e U dão os golpes aéreos, e S + U o da kagune a rodar.
 
 As teclas estão em `js/main.js` (`CONTROLS`) e o que cada combinação faz em
@@ -93,7 +106,7 @@ MUGEN vai até 1000, a do jogo até 100).
 
 ## Efeitos de impacto
 
-Poeira ao saltar, aterrar e correr; faíscas onde um golpe acerta; o chão a
+Poeira ao saltar e aterrar; faíscas onde um golpe acerta; o chão a
 rachar nos golpes que levantam o adversário e nos mais fortes; um rasto
 atrás do Kaneki nos golpes de kagune e nos especiais; um borrão nos dois
 quando correm ou investem pelo ar (o corpo desfocado, com cópias a ficar para
@@ -108,15 +121,29 @@ O que aparece em cada momento está em `js/kanekiFx.js`; quando, em
 faíscas à frente; tudo se apaga sozinho. A camada que os desenha é o
 `js/Effects.js`, a mesma do ultimate.
 
+Por cima do combate:
+
+- **O contador de combo** (`js/ComboCounter.js`): "5 HITS" do lado de quem
+  bate, enquanto o outro não recupera (atordoado, no ar, no chão). Só contam
+  os toques que tiram vida, e só aparece a partir de dois.
+- **A barra de dano recente**: a parte da vida que acabou de sair fica à
+  vista atrás da barra enquanto o combo dura, e só depois desce devagar
+  (`js/Hud.js`).
+- **O K.O. em câmara lenta**: o golpe que decide o round passa a um quarto
+  da velocidade durante uns dois terços de segundo (`KO_SLOW_FRAMES` em
+  `js/main.js`).
+
 ## O adversário
 
 O Tanjiro é um lutador como o Kaneki: a tabela de golpes dele está em
 `js/tanjiroMoves.js` (os três combos de espada, os golpes aéreos, as
 corridas, o carregar da respiração, dez especiais, dois ultimates e a Dança
-do Deus do Fogo) e a classe em `js/Tanjiro.js`. Só se mexe com as teclas
-dele (a tabela abaixo). Para ser a máquina a jogar por ele, põe-se
-`PLAYER2_AI = true` em `js/main.js`: aí quem o controla é o
-`js/EnemyAi.js`, que não mexe no lutador: devolve, a cada tick, as teclas que
+do Deus do Fogo), os que faltavam em `js/tanjiroExtraMoves.js` (o corte em
+queda, o reforço, os especiais que só existem dentro da Dança e o atirar a
+espada), os que ele tem sem espada em `js/tanjiroSwordless.js` e a classe
+em `js/Tanjiro.js` (que trata também da espada atirada). Com "2 JOGADORES" no menu
+só se mexe com as teclas dele (a tabela abaixo); com "1 JOGADOR" quem o
+controla é o `js/EnemyAi.js`, que não mexe no lutador: devolve, a cada tick, as teclas que
 um jogador premiria. Aproxima-se, ataca ao chegar ao alcance, continua o
 combo se acertou, de vez em quando recua ou salta, carrega a respiração
 quando está longe e usa os especiais e o ultimate quando tem energia. Os números que o tornam
@@ -126,8 +153,8 @@ O personagem original pesa 100 MB e tem centenas de animações; para o jogo
 vieram só as que ele usa:
 
 ```
-node tools/mugenfx.mjs ChaosTanjiro.sff ChaosTanjiro.air assets/tanjiro 0 20 200 ... s:9000,1
-node tools/mugensnd.mjs ChaosTanjiro.snd assets/tanjiro 0,26 1,34 ...
+node tools/mugenfx.mjs ChaosTanjiro.sff ChaosTanjiro.air assets/tanjiro 0 10 11 12 20 40 41 44 47 100 101 102 103 105 170 180 181 182 190 200 210 220 230 235 240 250 300 310 320 330 340 400 410 420 500 501 600 610 611 620 630 900 1003 1058 1200 1201 1202 1203 1208 1304 1400 1402 1410 1411 1500 1550 1557 1602 1700 1702 1722 1800 1801 1810 1811 1820 1821 1900 3000 3006 4000 4001 4002 4003 4004 4012 4013 4100 4101 4102 5000 5001 5002 5005 5010 5020 5030 5035 5040 5050 5070 5080 5100 5110 5120 5150 6120 6280 7031 7210 7652 7653 8000 8109 9000 41002 41003 41101 41150 41280 41300 41301 41500 41501 41502 41503 41600 41700 41701 41800 41801 41900 64310 64316 96178 96179 232360 11000 11011 11020 11041 11100 11102 11500 11501 11200 11210 11220 11230 11237 11300 11310 11320 11325 11330 11600 11601 11602 11610 28287 11301 15678 113330 14156 267821 78942 72928 72929 15500 41180 1874 1875 1876 1877 c:1058:3,8:11058 c:7210:3,8:17210 c:1058:3,3:21058 c:7210:3,3:27210 s:9000,0 s:9000,1
+node tools/mugensnd.mjs ChaosTanjiro.snd assets/tanjiro 0,26 1,34 ...   (todos os de tanjiro/snd/)
 ```
 
 O primeiro leva as acções (e, com `s:`, sprites soltos como o retrato); o
@@ -138,8 +165,16 @@ da espada existem em azul (água) e em laranja (fogo).
 O `mugenfx` reescreve o `character.json` e esquece os sons: depois dele,
 volta-se a correr o `mugensnd` com todos os que estão em `tanjiro/snd/`.
 
-Do original ficaram por transcrever o corte em queda, o reforço e os
-especiais que só existem dentro da Dança do Deus do Fogo.
+As chamas dos golpes da Dança são grandes de mais para o atlas do corpo e
+vão para `tanjiro/fx-extra/`, a meia resolução e com menos frames (cada
+frame leva ampliação 2, para se desenhar do mesmo tamanho):
+
+```
+node tools/mugenfxsmall.mjs ChaosTanjiro.sff ChaosTanjiro.air assets/tanjiro/fx-extra 951/2 973/2 987/2 988/2 10065/2 1750 1708/4 41710 14020/2 10126/4 992/2 10072/2 3683 6599/2 6600/2 4026 8043 4150/2 3903/2 4270
+```
+
+`accao/2` fica com um frame em cada dois. O que ficou de fora do original
+está no cimo do `js/tanjiroExtraMoves.js`.
 
 Joga-se com ele a dois: as setas andam e agacham, e os números (os de cima
 ou os do teclado numérico) são os botões.
@@ -174,14 +209,89 @@ são as outras do original: cai no chão, esgotado.
 | ↓ + 4 no ar | a rodar com a espada | |
 | ↓ + 5 | ultimate: os quatro cortes | a barra cheia |
 | ↓ + 6 | ultimate: o dragão de água | a barra cheia |
+| ← ou → + 5 no ar | o corte em queda: se a aura o apanhar, cai-lhe em cima e tira um terço da vida | 1 nível |
+| ↑ + 1 | o reforço: 20 s em que cada golpe recebido vira esquiva e a corrida vira relâmpago (repete-se 40 s depois de começar) | 1 nível |
 
 Com a Dança do Deus do Fogo ligada, os arcos da espada passam de água a
-fogo e os especiais tiram metade a mais.
+fogo e os especiais tiram metade a mais. As mesmas teclas dão então os
+golpes que só existem na Dança, os que substituem os de água no original:
+
+| Tecla (com a Dança) | O que faz | Energia |
+|---|---|---|
+| 5 | a postura: depois 1 (ou nada) estocada, ↑ corte a subir, ↓ no ar corte a descer | 1 nível |
+| ↑ + 5 | cinco cortes em chamas | 1 nível |
+| ← ou → + 5 | carrega e atravessa-o; se acertar, colunas de fogo | 1 nível |
+| ↑ + 6 | dois cortes pesados a correr | 1 nível |
+| ← ou → + 6 | dois cortes: o primeiro segura-o, o segundo tira um nono da vida | 1 nível |
+| ↑ + 4 | a roda de fogo, a saltar | 1 nível |
+| ← ou → + 4 | a estocada que o prende | 1 nível |
+| ↓ + 4 | o corte que o levanta, três no ar e o último lá de cima | 1,5 |
+| ↑ + 1 | a investida-relâmpago, de um lado ao outro | 1 nível |
+| ← ou → + 1 | o contra-ataque: se lhe baterem, surge por trás e corta | 1 nível |
+| ↑ + 9, ou ↓ + 6 no ar | voa até ele, leva-o e fecha com um corte | 1 nível |
+| 5 no ar | a postura no ar (a estocada é o corte do ar) | 1 nível |
+| ↓ + 5 | ultimate: os cortes em chamas, com uma roda de cinco segundos | a barra cheia |
+| ↓ + 6 | ultimate: prende-o, sobe ao céu e cai sobre ele (metade da vida) | a barra cheia |
+| ↓ + 9 | atira a espada: se o apanha, fica-lhe espetada e salta dele a rodar; ele fica sem espada (a tabela abaixo) | meio nível |
+
+Com a Dança ligada, cada golpe que o apanhe tem ainda 15% de virar uma
+esquiva (some e aparece por trás do adversário) e outros 15% de virar a
+guarda do contra-ataque, como no original.
+
+Sem espada, o Tanjiro fica com outra arte (parado, a andar, a saltar, a
+correr, a carregar) e com os golpes do original para esse caso; os de
+espada deixam de sair. A espada fica espetada no chão onde caiu: ao pé
+dela, o 4 apanha-a; depois de um golpe sem espada que acertou, o 4
+fá-la voltar à mão esteja onde estiver. O computador, se não a apanhar,
+recupera-a sozinho ao fim de 20 s. Sem espada, 15% dos golpes que o
+apanhem viram a defesa (↓ + 6).
+
+| Tecla (sem espada) | O que faz | Energia |
+|---|---|---|
+| 1 · 6 | socos e pontapés, que encadeiam se acertarem | |
+| ↓ + 1 | o gancho que levanta | |
+| ↓ + 6 | a defesa: se lhe baterem logo a seguir, empurra-o | |
+| 1 · 6 no ar | socos e pontapé do ar | |
+| 5 | pára o tempo, corre para ele, agarra-o e derruba-o | 1 nível |
+| ↑ + 5 | a cabeçada (segurando o 5, a que o deixa mais tempo atordoado) | 1 nível |
+| ← ou → + 5 | dez golpes seguidos, se o primeiro acertar | precisa de 1 |
+| ↑ + 6 | um segundo em guarda: se lhe baterem, tira-lhe um décimo da vida | 1 nível |
+| 4 | apanha a espada (ao pé dela, ou a seguir a um golpe que acertou) | |
 
 As teclas base espelham as do Kaneki: 1 = J, 2 = K, 3 = L, 4 = U, 5 = I,
 6 = O e 9 = Q.
 
 Na consola, `game.ai.enabled = false` deixa-o parado, para treinar combos.
+
+## A partida
+
+O jogo abre num menu (`js/Menu.js`): "1 JOGADOR" é o Kaneki contra o Tanjiro
+do computador, "2 JOGADORES" os dois no mesmo teclado. Escolhe-se com W/S ou
+com as setas, e o Enter começa.
+
+Cada partida é à melhor de 3 rounds, de 99 segundos cada. O primeiro abre com
+as entradas dos dois; todos com o anúncio ("Round 1", "Round 2", ou "Final
+Round" no que decide) e o "Fight", e só aí as teclas passam a contar. Um
+round acaba por K.O. ou quando o tempo chega a zero: aí ganha quem tiver mais
+vida, em fracção da vida máxima (o Tanjiro tem mais do que o Kaneki), e
+empate é "Draw Game", sem vitória para ninguém. A energia passa de um round
+para o seguinte. Quem ganhar dois vence a partida; a seguir vem o "Tentar
+novamente?". O relógio pára durante a cena do ultimate.
+
+Os rounds ganhos aparecem ao lado do relógio, um ícone por round (apagado o
+que falta ganhar). As regras estão no cimo da secção "partida" de
+`js/main.js`: `WINS_NEEDED`, `ROUND_SECONDS`, `ROUND_END_TICKS`.
+
+Os anúncios e as vozes são os do pacote de lifebars (`hud/announcer/`). Das
+animações dele ficou só o frame já formado de cada uma, para não pesarem 29
+MB; a entrada e a saída fazem-se em `js/Announcer.js`:
+
+```
+node tools/mugenfx.mjs fight.sff fight.def assets/hud/announcer s:101,14 s:102,14 s:103,14 s:108,17 s:110,15 s:111,23
+node tools/mugensnd.mjs fight.snd assets/hud/announcer 0,1 0,2 0,3 0,8 1,0 2,0 2,2 2,3
+```
+
+"Time Over", "Draw Game" e quem venceu não têm arte no pacote: são texto.
 
 ## O HUD
 

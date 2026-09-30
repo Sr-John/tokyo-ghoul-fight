@@ -107,13 +107,6 @@ export class KanekiFx {
     this.speedGhost(fighter);
   }
 
-  /** O pó que a corrida vai deixando. */
-  dashTrail(fighter) {
-    this.spawnAt(fighter, 7030, {
-      dx: 5, dy: 2, scale: [0.2, 0.25], velocity: [-1.5, 0], blend: SOFT, layer: 'back',
-    });
-  }
-
   /** A investida no ar: o mesmo borrão da corrida. */
   airDash(fighter) {
     this.speedGhost(fighter);

@@ -1,6 +1,29 @@
 import { buildAnimations, pickSounds } from './characterAnimations.js';
 import { KANEKI_COMMANDS, KANEKI_CONSTANTS, KANEKI_MOVES } from './kanekiMoves.js';
+import { KANEKI_SPECIALS, SPECIAL_FLASHES, superFlash } from './kanekiSpecials.js';
+import { KANEKI_SUPERS } from './kanekiSupers.js';
+import { combineMoves } from './moveTables.js';
 import { MoveFighter } from './MoveFighter.js';
+
+/** Todos os golpes do Kaneki: os da tabela principal, os especiais e os supers. */
+const { moves: MOVES, commands: COMMANDS } = combineMoves(
+  { moves: KANEKI_MOVES, commands: KANEKI_COMMANDS },
+  KANEKI_SUPERS,
+  KANEKI_SPECIALS,
+);
+
+// O Binge Strike e o Rinkaku Assault vivem na tabela principal, mas no
+// original também largam os clarões da superpause dos especiais.
+for (const id of [1000, 1200, 1201]) {
+  const move = MOVES[id];
+  MOVES[id] = {
+    ...move,
+    tick(fighter) {
+      if (fighter.moveTime === 1) superFlash(fighter, SPECIAL_FLASHES);
+      move.tick?.(fighter);
+    },
+  };
+}
 
 /**
  * O lutador do jogador.
@@ -128,7 +151,7 @@ const KANEKI_SOUNDS = pickSounds(KANEKI_ACTIONS);
 
 /** Todas as animações do Kaneki numa das formas: `form` é 0 ou MASKED_FORM. */
 const kanekiAnimations = (character, form = 0) => (
-  buildAnimations(character, KANEKI_ACTIONS, KANEKI_MOVES, form)
+  buildAnimations(character, KANEKI_ACTIONS, MOVES, form)
 );
 
 const PALETTE = {
@@ -191,8 +214,8 @@ export class Kaneki extends MoveFighter {
 
     super({
       animations: character ? kanekiAnimations(character) : {},
-      moveSet: KANEKI_MOVES,
-      commands: KANEKI_COMMANDS,
+      moveSet: MOVES,
+      commands: COMMANDS,
       constants: KANEKI_CONSTANTS,
       sounds: KANEKI_SOUNDS,
       playSound: ([group, item], { volume } = {}) =>

@@ -6,9 +6,8 @@
  * Estão aqui os golpes normais (os três combos de espada, os aéreos, o
  * corte a correr e as corridas), o carregar da respiração, dez especiais,
  * dois ultimates e a Dança do Deus do Fogo — o modo que põe fogo na espada
- * e torna os especiais mais fortes. Do original ficaram por transcrever o
- * corte em queda e o reforço (cujos efeitos não estão no ficheiro de golpes
- * de forma que se deixe ler) e os especiais que só existem dentro da Dança.
+ * e torna os especiais mais fortes. O corte em queda, o reforço e os
+ * especiais que só existem dentro da Dança estão em tanjiroExtraMoves.js.
  *
  * Um campo a mais do que no Kaneki:
  *   slash   o arco que a espada deixa no ar: { elem | time, at: [x, y],
@@ -726,7 +725,7 @@ Object.assign(TANJIRO_MOVES, {
       { time: 32, action: 1557, at: [1, 10], bound: true, scale: 0.6, lifetime: 60 },
     ],
     tick(fighter) {
-      if (fighter.moveTime === 1 && fighter.opponent) fighter.opponent.hitPause = 30;
+      if (fighter.moveTime === 1) fighter.superPause(30);
     },
   },
 
@@ -821,7 +820,8 @@ Object.assign(TANJIRO_MOVES, {
     sounds: [{ time: 0, sound: [0, 101] }],
     tick(fighter) {
       if (fighter.moveTime === 1 && !fighter.isHinokami) {
-        if (fighter.opponent) fighter.opponent.hitPause = 45;
+        // Sem escurecer: a fotografia do modo já tapa o fundo.
+        fighter.superPause(45, { darken: false });
         fighter.showHinokamiSpotlight?.();
       }
       if (fighter.moveTime === 10) fighter.toggleHinokami();
@@ -845,7 +845,7 @@ Object.assign(TANJIRO_MOVES, {
       { time: 0, sound: [1, 37] },
     ],
     tick(fighter) {
-      if (fighter.moveTime === 1 && fighter.opponent) fighter.opponent.hitPause = ULTIMATE_FREEZE;
+      if (fighter.moveTime === 1) fighter.superPause(ULTIMATE_FREEZE);
     },
   },
   3001: {
@@ -899,6 +899,11 @@ Object.assign(TANJIRO_MOVES, {
   },
 });
 
+// Os golpes de tanjiroExtraMoves.js usam as mesmas peças.
+export {
+  slash, followUp, SWING, SPECIAL_POWER, SUPER_POWER, ULTIMATE_POWER,
+};
+
 export const TANJIRO_COMMANDS = {
   ground: [
     { input: 's', to: 500, unlessFullPower: true },
@@ -915,7 +920,9 @@ export const TANJIRO_COMMANDS = {
     { input: 'b', down: true, to: 1800, power: ULTIMATE_POWER },
     { input: 'b', forward: true, to: 1240, power: SPECIAL_POWER, when: (fighter) => !fighter.input.down },
     { input: 'c', up: true, to: 1410, power: SUPER_POWER },
-    { input: 'c', down: true, to: 1602, power: GRAB_POWER },
+    // O agarrão é só da água (Var(29) = 0 no .cmd): com a Dança, ↓ + 4 é o
+    // 41200, e sem energia para ele sai o corte normal.
+    { input: 'c', down: true, to: 1602, power: GRAB_POWER, when: (fighter) => !fighter.isHinokami },
     { input: 'c', forward: true, to: 1500, power: SPECIAL_POWER, when: (fighter) => !fighter.input.down },
 
     // Baixo + soco liga e desliga a Dança do Deus do Fogo, como no original

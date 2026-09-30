@@ -15,7 +15,7 @@ const DESIGN_HEIGHT = 720;
 const DANGER_RATIO = 0.25;
 
 /** Fracção da diferença que a barra de dano recente percorre por tick. */
-const DRAIN_EASING = 0.06;
+const DRAIN_EASING = 0.035;
 
 /** Energia de cada nível da barra. */
 const POWER_PER_LEVEL = 1000;
@@ -48,6 +48,18 @@ const SIDES = [
 /** A moldura do relógio, ao centro. */
 const TIMER_SPRITE = '39,0';
 const TIMER_CENTER = [640, 73];
+/** Abaixo destes segundos, o relógio fica vermelho. */
+const TIMER_WARNING = 10;
+
+/**
+ * Os rounds ganhos, ao lado do relógio: onde fica o primeiro ícone de cada
+ * lado e para onde vão os seguintes. Os que faltam ganhar ficam apagados.
+ */
+const WIN_ICONS = [
+  { sprite: '38,0', x: 526, y: 19, step: -30 },
+  { sprite: '38,1', x: 719, y: 19, step: 30 },
+];
+const EMPTY_ICON_ALPHA = 0.25;
 
 export class Hud {
   /**
@@ -58,6 +70,13 @@ export class Hud {
    */
   constructor({ atlas, width, players }) {
     this.atlas = atlas;
+
+    /** Segundos que faltam no round; null mostra o infinito. */
+    this.time = null;
+    /** Rounds ganhos por cada lado, e quantos é preciso ganhar. */
+    this.wins = [0, 0];
+    this.winsNeeded = 2;
+
     this.scale = width / DESIGN_WIDTH;
     this.players = players.map((player, index) => ({
       ...player,
@@ -71,6 +90,8 @@ export class Hud {
     for (const player of this.players) {
       const target = player.fighter.healthRatio;
       const delta = target - player.damageRatio;
+      // Enquanto o combo dura, o dano fica todo à vista; só desce no fim.
+      if (delta < 0 && player.fighter.isInCombo) continue;
       player.damageRatio = Math.abs(delta) < 0.001 || delta > 0
         ? target
         : player.damageRatio + delta * DRAIN_EASING;
@@ -89,6 +110,7 @@ export class Hud {
       this.drawName(ctx, player);
     }
     this.drawTimer(ctx);
+    this.drawWins(ctx);
 
     ctx.restore();
   }
@@ -193,16 +215,33 @@ export class Hud {
     ctx.restore();
   }
 
-  /** O combate não tem tempo: a moldura fica, com o sinal de infinito. */
+  /** O relógio do round: os segundos que faltam, ou o infinito sem tempo. */
   drawTimer(ctx) {
     this.sprite(ctx, TIMER_SPRITE);
 
+    const text = this.time === null ? '∞' : String(Math.max(0, this.time)).padStart(2, '0');
     ctx.save();
-    ctx.font = '900 44px sans-serif';
+    ctx.font = this.time === null ? '900 44px sans-serif' : 'italic 900 40px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText('∞', TIMER_CENTER[0], TIMER_CENTER[1] - 14);
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#0c0d11';
+    ctx.fillStyle = this.time !== null && this.time <= TIMER_WARNING ? '#ff4d5e' : '#ffffff';
+    if (this.time !== null) ctx.strokeText(text, TIMER_CENTER[0], TIMER_CENTER[1] - 14);
+    ctx.fillText(text, TIMER_CENTER[0], TIMER_CENTER[1] - 14);
     ctx.restore();
+  }
+
+  /** Um ícone por round a ganhar: aceso os já ganhos, apagado os outros. */
+  drawWins(ctx) {
+    WIN_ICONS.forEach((icon, index) => {
+      for (let i = 0; i < this.winsNeeded; i += 1) {
+        ctx.save();
+        ctx.translate(icon.x + icon.step * i, icon.y);
+        if (i >= this.wins[index]) ctx.globalAlpha = EMPTY_ICON_ALPHA;
+        this.sprite(ctx, icon.sprite);
+        ctx.restore();
+      }
+    });
   }
 }

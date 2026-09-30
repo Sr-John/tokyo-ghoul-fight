@@ -52,6 +52,28 @@ export class Picture {
   }
 }
 
+/**
+ * Uma cor lisa que enche o ecrã, para usar como efeito com `cover`: o fundo
+ * a escurecer na pausa de um especial, por exemplo.
+ */
+export class SolidFill {
+  constructor(color = '#000000') {
+    this.color = color;
+    this.totalTicks = Infinity;
+  }
+
+  frameAt(tick) {
+    return tick;
+  }
+
+  drawCover(ctx, tick, width, height) {
+    ctx.save();
+    ctx.fillStyle = this.color;
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+  }
+}
+
 /** Carrega uma fotografia; falha se o ficheiro não existir. */
 export function loadPicture(src, options) {
   return new Promise((resolve, reject) => {
@@ -92,6 +114,10 @@ export class EffectLayer {
    *   fadeOut    nos últimos tantos ticks de vida, vai-se apagando
    *   hold       fica no último frame (ou em ciclo) até ser retirado à mão
    *   tag        nome para o retirar com clear(tag)
+   *   gravity    px por tick² somados à velocidade vertical (pedras a voar)
+   *   spin       graus por tick somados ao ângulo
+   *   floor      y do chão: ao lá chegar a cair, assenta e deixa de cair
+   *   friction   no chão, a velocidade horizontal e o `spin` multiplicam-se por isto
    */
   spawn({
     animation,
@@ -110,6 +136,10 @@ export class EffectLayer {
     fadeOut = 0,
     hold = false,
     tag = null,
+    gravity = 0,
+    spin = 0,
+    floor = null,
+    friction = 1,
   }) {
     if (!animation) return null;
 
@@ -130,6 +160,11 @@ export class EffectLayer {
       fadeOut,
       hold,
       tag,
+      gravity,
+      spin,
+      floor,
+      friction,
+      landed: false,
       tick: 0,
     };
     this.effects.push(effect);
@@ -146,8 +181,22 @@ export class EffectLayer {
   update() {
     for (const effect of this.effects) {
       effect.tick += 1;
+      // Uma cópia da velocidade: o array pode ser partilhado com quem o deu.
+      if (effect.gravity) effect.velocity = [effect.velocity[0], effect.velocity[1] + effect.gravity];
       effect.x += effect.velocity[0];
       effect.y += effect.velocity[1];
+      effect.angle += effect.spin;
+
+      if (effect.floor !== null && !effect.landed && effect.velocity[1] > 0 && effect.y >= effect.floor) {
+        effect.landed = true;
+        effect.y = effect.floor;
+        effect.gravity = 0;
+        effect.velocity = [effect.velocity[0], 0];
+      }
+      if (effect.landed) {
+        effect.velocity = [effect.velocity[0] * effect.friction, 0];
+        effect.spin *= effect.friction;
+      }
     }
 
     this.effects = this.effects.filter((effect) => {

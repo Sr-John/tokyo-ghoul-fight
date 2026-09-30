@@ -65,6 +65,9 @@ export class Fighter {
     /** Ticks parado no instante de um impacto, a dar ou a levar. */
     this.hitPause = 0;
 
+    /** Golpes seguidos que levou sem recuperar: o combo que lhe estão a fazer. */
+    this.comboHits = 0;
+
     /** Verdadeiro nos ticks em que a pausa do impacto o segurou. */
     this.isFrozen = false;
 
@@ -107,6 +110,14 @@ export class Fighter {
 
   get isDefeated() {
     return this.health <= 0;
+  }
+
+  /**
+   * Verdadeiro enquanto ainda não recuperou do último golpe (atordoado, no
+   * ar, no chão ou parado pelo impacto): o golpe seguinte continua o combo.
+   */
+  get isInCombo() {
+    return this.hitStun > 0 || this.isFalling || this.downTicks > 0 || this.hitPause > 0;
   }
 
   /** Verdadeiro enquanto o lutador não pode ser controlado. */
@@ -164,6 +175,8 @@ export class Fighter {
   receiveHit({
     damage = 0, knockback = 0, launch = 0, fall = false, stun = 0, pause = 0, direction = 1,
   }) {
+    // Só os toques que tiram vida contam: os que apenas o seguram não.
+    if (damage > 0) this.comboHits = this.isInCombo ? this.comboHits + 1 : 1;
     this.takeDamage(damage);
     this.hitStun = stun;
     this.knockback = knockback * direction;

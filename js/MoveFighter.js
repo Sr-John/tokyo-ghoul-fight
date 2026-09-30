@@ -1,3 +1,4 @@
+import { SolidFill } from './Effects.js';
 import { SpriteFighter } from './SpriteFighter.js';
 
 /**
@@ -22,8 +23,15 @@ const DOUBLE_TAP_TICKS = 12;
 /** Os botões: uma pressão fica guardada uns ticks. As direcções não. */
 const BUTTONS = ['a', 'b', 'c', 'i', 's', 'jump'];
 
-/** De quantos em quantos ticks a corrida larga pó e um golpe larga rasto. */
-const DASH_DUST_EVERY = 4;
+/**
+ * A pausa de um especial (a "SuperPause" do MUGEN): o fundo escurece, por
+ * baixo dos lutadores, com esta opacidade, e volta nos últimos ticks.
+ */
+const SUPER_PAUSE_DARKNESS = 0.6;
+const SUPER_PAUSE_FADE = 8;
+const SUPER_PAUSE_FILL = new SolidFill('#000000');
+
+/** De quantos em quantos ticks um golpe larga rasto. */
 const TRAIL_EVERY = 3;
 /** De quantos em quantos ticks a corrida larga uma cópia desfocada. */
 const SPEED_GHOST_EVERY = 2;
@@ -115,6 +123,16 @@ export class MoveFighter extends SpriteFighter {
     /** Quem larga os efeitos (um KanekiFx). Quem o define é o jogo. */
     this.fx = null;
 
+    /**
+     * Atlas de efeitos à parte, por nome (os dos especiais, dos supers…):
+     * os projécteis e os efeitos da tabela com `atlas: 'nome'` vêm daqui.
+     * Quem os carrega e define é o jogo.
+     */
+    this.fxAtlases = {};
+
+    /** Para que lado olhava ao começar cada comando em sequência detectado. */
+    this.motionFacing = {};
+
     /** O golpe em curso já rachou o chão. */
     this.hasBrokenGround = false;
 
@@ -159,8 +177,13 @@ export class MoveFighter extends SpriteFighter {
     for (const [key, direction] of [['left', -1], ['right', 1]]) {
       if (!this.input[key] || previous[key]) continue;
 
+      // Com um ↓ pelo meio não é corrida: é um comando (o ↓→↓→ dos supers).
+      const crouchedBetween = this.directionLog.some(
+        (entry) => entry.direction === 'D' && entry.at > this.lastTap.at,
+      );
       const isDoubleTap = this.lastTap.direction === direction
-        && this.clock - this.lastTap.at <= DOUBLE_TAP_TICKS;
+        && this.clock - this.lastTap.at <= DOUBLE_TAP_TICKS
+        && !crouchedBetween;
       if (isDoubleTap) {
         this.buffer.dash = BUFFER_TICKS;
         this.dashDirection = direction;
@@ -176,7 +199,7 @@ export class MoveFighter extends SpriteFighter {
 
     for (const [key, direction] of [[forward, 'F'], [backward, 'B'], ['down', 'D'], ['up', 'U']]) {
       if (!this.input[key] || previous[key]) continue;
-      this.directionLog.push({ direction, at: this.clock });
+      this.directionLog.push({ direction, at: this.clock, facing: this.facing });
       if (this.directionLog.length > DIRECTION_LOG_SIZE) this.directionLog.shift();
     }
   }
@@ -191,13 +214,22 @@ export class MoveFighter extends SpriteFighter {
       if (!this.input[motion.button] || previous[motion.button]) continue;
 
       let next = motion.sequence.length - 1;
+      let first = null;
       for (let i = this.directionLog.length - 1; i >= 0 && next >= 0; i--) {
         const entry = this.directionLog[i];
         if (this.clock - entry.at > motion.window) break;
-        if (entry.direction === motion.sequence[next]) next -= 1;
+        if (entry.direction === motion.sequence[next]) {
+          next -= 1;
+          first = entry;
+        }
       }
 
-      if (next < 0) this.buffer[motion.name] = BUFFER_TICKS;
+      if (next < 0) {
+        this.buffer[motion.name] = BUFFER_TICKS;
+        // Um "trás" pelo meio vira o lutador; o golpe sai para onde ele
+        // olhava quando o comando começou.
+        this.motionFacing[motion.name] = first.facing;
+      }
     }
   }
 
@@ -336,6 +368,12 @@ export class MoveFighter extends SpriteFighter {
 
       if (command.airDash) this.airDashesLeft -= 1;
       if (command.input === 'dash') this.facing = this.dashDirection;
+      const motion = this.commands.motions?.find((entry) => entry.name === command.input);
+      if (motion) {
+        this.facing = this.motionFacing[motion.name] ?? this.facing;
+        // O botão do comando já foi gasto nele: não dá também o golpe simples.
+        this.buffer[motion.button] = 0;
+      }
       this.startMove(command.to);
       return;
     }
@@ -377,7 +415,6 @@ export class MoveFighter extends SpriteFighter {
   /** Um tick de um golpe em curso. */
   onMoveTick() {
     const { move, moveTime } = this;
-    if (move.dash === 'ground' && moveTime % DASH_DUST_EVERY === 0) this.fx?.dashTrail(this);
     if (move.dash) {
       // A correr, o corpo fica desfocado e vai largando cópias para trás.
       this.startSpeedBlur();
@@ -555,6 +592,9 @@ export class MoveFighter extends SpriteFighter {
     for (const spec of move.projectiles ?? []) {
       if (this.eventTime(spec) === time) this.spawnProjectile(spec);
     }
+    for (const spec of move.effects ?? []) {
+      if (this.eventTime(spec) === time) this.spawnEffect(spec);
+    }
   }
 
   /** Travagem no ar: [no x, a cair, a subir], nas medidas do MUGEN. */
@@ -655,9 +695,11 @@ export class MoveFighter extends SpriteFighter {
    *   armAfter           só começa a acertar passados tantos ticks
    *   finalHit           um último golpe, ao acabar, durante `finalTicks`
    *   sounds             sons ao aparecer
+   *   atlas              o nome de um atlas de `fxAtlases`, se a arte vier de lá
+   *   tick               (lutador, projéctil) => …, chamado a cada tick de vida
    */
   spawnProjectile(spec, origin = {}) {
-    const animation = this.animator.animations.get(`helper:${spec.action}`);
+    const animation = this.helperAnimation(spec, spec.action, true);
     if (!animation) return null;
 
     const [dx, dy] = spec.at ?? [0, 0];
@@ -671,12 +713,13 @@ export class MoveFighter extends SpriteFighter {
       scale: spec.scale ?? 1,
       tick: 0,
       animation,
-      endAnimation: this.animator.animations.get(`helper:${spec.endAction}`) ?? null,
+      endAnimation: this.helperAnimation(spec, spec.endAction, false),
       lifetime: spec.lifetime,
       hit: spec.hit ? this.toGameHit(spec.hit) : null,
       source: spec.hit ?? null,
       hasHit: false,
       lastHit: -Infinity,
+      spec,
       every: spec.every ?? 0,
       armAfter: spec.armAfter ?? 0,
       final: spec.finalHit
@@ -687,6 +730,86 @@ export class MoveFighter extends SpriteFighter {
 
     for (const cue of spec.sounds ?? []) this.playSound?.(cue.sound, cue);
     return helper;
+  }
+
+  /**
+   * A animação de um projéctil: do atlas de efeitos que o `spec` nomear, ou
+   * das do próprio lutador. Null se não existir.
+   */
+  helperAnimation(spec, action, loop) {
+    if (action === undefined) return null;
+    if (spec.atlas) return this.fxAtlases[spec.atlas]?.animation(action, { loop }) ?? null;
+    return this.animator.animations.get(`helper:${action}`) ?? null;
+  }
+
+  /**
+   * Um efeito da tabela (`effects` de um golpe): só se vê, não acerta. Vai
+   * para a camada de efeitos do jogo:
+   *
+   *   action, atlas   a animação, e o atlas de `fxAtlases` de onde vem (sem
+   *                   ele, das do próprio lutador)
+   *   at              [x, y] a partir dos pés, nas medidas do MUGEN
+   *   scale           ampliação ([x, y] ou um número)
+   *   velocity        [x, y] por tick, nas medidas do MUGEN
+   *   angle, layer, blend, duration, fadeOut, loop   como no EffectLayer (sem
+   *                   `duration`, vive uma volta da animação)
+   *   onOpponent      nasce nos pés do adversário em vez dos dele
+   *   gravity         px por tick², nas medidas do MUGEN (os arcos das pedras)
+   *   spin, friction  como no EffectLayer
+   *   floor           true: assenta no chão do ringue ao cair
+   */
+  spawnEffect(spec) {
+    const effects = this.fx?.effects;
+    if (!effects) return null;
+
+    const loop = Boolean(spec.loop);
+    const animation = spec.atlas
+      ? this.fxAtlases[spec.atlas]?.animation(spec.action, { loop })
+      : this.character?.animation(spec.action, { loop });
+    if (!animation) return null;
+
+    const anchor = spec.onOpponent && this.opponent ? this.opponent : this;
+    const [dx, dy] = spec.at ?? [0, 0];
+    const [vx, vy] = spec.velocity ?? [0, 0];
+    const scale = Array.isArray(spec.scale) ? spec.scale : [spec.scale ?? 1, spec.scale ?? 1];
+
+    return effects.spawn({
+      animation,
+      x: anchor.position.x + anchor.width / 2 + dx * this.facing * this.unit,
+      y: anchor.position.y + anchor.height + dy * this.unit,
+      velocity: [vx * this.facing * this.unit, vy * this.unit],
+      scale: [scale[0] * this.unit, scale[1] * this.unit],
+      facing: this.facing,
+      angle: spec.angle ?? 0,
+      layer: spec.layer ?? 'front',
+      blend: spec.blend ?? null,
+      duration: spec.duration ?? null,
+      fadeOut: spec.fadeOut ?? 0,
+      gravity: (spec.gravity ?? 0) * this.unit,
+      spin: spec.spin ?? 0,
+      floor: spec.floor ? this.bounds.groundY ?? this.bounds.height : null,
+      friction: spec.friction ?? 1,
+    });
+  }
+
+  /**
+   * A pausa de um especial: o adversário fica parado `ticks` ticks e o
+   * fundo escurece durante esse tempo (sem `darken`, só pára).
+   */
+  superPause(ticks, { darken = true } = {}) {
+    if (this.opponent) this.opponent.hitPause = Math.max(this.opponent.hitPause, ticks);
+    if (!darken || !this.fx?.effects) return;
+
+    this.fx.effects.clear('superpause');
+    this.fx.effects.spawn({
+      animation: SUPER_PAUSE_FILL,
+      cover: true,
+      layer: 'backdrop',
+      blend: { alpha: SUPER_PAUSE_DARKNESS },
+      duration: ticks,
+      fadeOut: SUPER_PAUSE_FADE,
+      tag: 'superpause',
+    });
   }
 
   /** A kagune que sai do chão: aparece ao pé do adversário e acerta sozinha. */
@@ -747,6 +870,9 @@ export class MoveFighter extends SpriteFighter {
         helper.every = 0;
         for (const cue of helper.hit.sounds) this.playSound?.(cue.sound, cue);
       }
+
+      // O que o projéctil faz por si a cada tick (`tick` do spec).
+      helper.spec.tick?.(this, helper);
     }
 
     this.helpers = this.helpers.filter((helper) => this.helperFrame(helper));
@@ -786,6 +912,17 @@ export class MoveFighter extends SpriteFighter {
     }
 
     return attacks;
+  }
+
+  /**
+   * Os golpes com `invulnerable` não podem ser atingidos (o NotHitBy do
+   * MUGEN). Pode ser uma função (lutador) => boolean, para só uma parte do golpe.
+   */
+  getHurtBoxes() {
+    const { invulnerable } = this.move ?? {};
+    const untouchable = typeof invulnerable === 'function' ? invulnerable(this) : invulnerable;
+    if (this.move && !this.isLocked && untouchable) return [];
+    return super.getHurtBoxes();
   }
 
   /** Apanhar desfaz o que o lutador trazia agarrado a si. */

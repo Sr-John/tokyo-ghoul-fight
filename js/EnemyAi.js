@@ -31,7 +31,16 @@ const CHANCE = {
   special: 0.3,
   ultimate: 0.6,
   hinokami: 0.25,
+  // Com a Dança, ao longe: atirar a espada (raro, como no original).
+  throwSword: 0.08,
+  // Sem espada: ir buscá-la, e apanhá-la quando está ao pé dela.
+  fetchSword: 0.6,
+  pickUpSword: 0.5,
 };
+
+/** Sem espada, o computador recupera-a sozinho passado este tempo (20 s), como no original. */
+const SWORD_RETURN_TICKS = 1200;
+const SWORD_THROW_POWER = 500;
 
 /** Energia de um especial, e ticks que fica a carregar de cada vez. */
 const SPECIAL_POWER = 1000;
@@ -58,6 +67,8 @@ export class EnemyAi {
     this.walk = 0;
     this.wait = 0;
     this.lastButton = 'a';
+    /** A andar até à espada, sem parar ao chegar ao alcance do jogador. */
+    this.fetching = false;
   }
 
   /** As teclas deste tick. */
@@ -81,16 +92,57 @@ export class EnemyAi {
       return {};
     }
 
+    // Sem espada há 20 s: volta-lhe sozinha.
+    if (fighter.isSwordless && fighter.swordlessTicks >= SWORD_RETURN_TICKS) fighter.recoverSword?.();
+
     this.wait -= 1;
-    if (this.wait > 0) return this.hold(this.walk);
+    // A caminho da espada: ao chegar, apanha-a.
+    if (this.fetching && fighter.canPickUpSword) {
+      this.fetching = false;
+      this.wait = 0;
+      this.press('c');
+      return {};
+    }
+    if (this.wait > 0) return this.fetching ? this.direction(this.walk) : this.hold(this.walk);
 
     // Hora de decidir.
     this.wait = between(THINK_TICKS);
     this.walk = 0;
+    this.fetching = false;
+
+    // Sem espada: apanha-a se estiver ao pé dela; se estiver no chão, vai lá.
+    if (fighter.isSwordless) {
+      if (fighter.canPickUpSword && Math.random() < CHANCE.pickUpSword) {
+        this.press('c');
+        return {};
+      }
+      const { sword } = fighter;
+      if (sword?.phase === 'ground' && Math.random() < CHANCE.fetchSword) {
+        const gap = sword.x - (fighter.position.x + fighter.width / 2);
+        const side = Math.sign(gap);
+        if (side) {
+          // Anda até lá de uma vez (a um passo de distância chega para a apanhar).
+          const step = fighter.constants.walk * fighter.unit;
+          this.walk = side;
+          this.fetching = true;
+          this.wait = Math.min(90, Math.ceil(Math.abs(gap) / step));
+          return this.direction(side);
+        }
+      }
+    }
 
     // Com o jogador no chão ou a levantar-se, espera: não há em quem bater.
     if (target.downTicks > 0 || target.isFalling) return {};
     if (Math.random() < CHANCE.idle) return {};
+
+    // Com a Dança, ao longe e com a espada na mão: atira-a.
+    const canThrow = fighter.isHinokami && !fighter.isSwordless
+      && fighter.power >= SWORD_THROW_POWER && distance > REACH;
+    if (canThrow && Math.random() < CHANCE.throwSword) {
+      this.queue.push(this.direction(toward));
+      this.press('s', { down: true });
+      return {};
+    }
 
     if (distance > REACH) {
       // Longe e sem a barra cheia: aproveita para respirar.
